@@ -21,7 +21,9 @@ jobs:
     - name: Download ClassData TPK
       shell: pwsh
       run: |
-        Invoke-WebRequest -Uri "https://github.com/nesrak1/AssetsTools.NET/raw/master/classdata.tpk" -OutFile "./dist/classdata.tpk"
+        # 使用更稳定的镜像或直链
+        $url = "https://raw.githubusercontent.com/nesrak1/AssetsTools.NET/master/classdata.tpk"
+        Invoke-WebRequest -Uri $url -OutFile "./dist/classdata.tpk" -UserAgent "Mozilla/5.0"
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
