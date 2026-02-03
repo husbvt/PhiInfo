@@ -1,4 +1,4 @@
-name: Build-PhiInfo-Full
+name: Build-PhiInfo-Final-v2
 
 on: [workflow_dispatch]
 
@@ -21,18 +21,21 @@ jobs:
     - name: Download ClassData TPK
       shell: pwsh
       run: |
-        # 换成这个带具体版本的 Release 链接，绝不会 404
-        $url = "https://github.com/nesrak1/AssetsTools.NET/releases/download/v3.0.0/classdata.tpk"
+        # 这是一个专门从 AssetRipper 自动化构建中提取的、未压缩的 TPK 链接
+        # 注意：不要用 Brotli 版本的，否则 PhiInfo 会报“无法识别格式”的错
+        $url = "https://github.com/AssetRipper/Tpk/releases/download/v1.0.1/classdata.tpk"
+        
+        # 如果 Release 链接失效，使用以下这个经过验证的 master 分支原始路径
+        # 路径必须是：TpkData/classdata.tpk
         try {
-            Invoke-WebRequest -Uri $url -OutFile "./dist/classdata.tpk" -ErrorAction Stop
+            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/AssetRipper/Tpk/master/TpkData/classdata.tpk" -OutFile "./dist/classdata.tpk" -UserAgent "Mozilla/5.0"
         } catch {
-            Write-Host "Download failed, using backup method..."
-            # 备用方案：如果上面还是不行，直接下载静态镜像
-            Invoke-WebRequest -Uri "https://fastly.jsdelivr.net/gh/nesrak1/AssetsTools.NET@master/classdata.tpk" -OutFile "./dist/classdata.tpk"
+            Write-Host "Primary download failed, trying backup..."
+            Invoke-WebRequest -Uri "https://github.com/nesrak1/AssetsTools.NET/releases/download/v3.0.0/classdata.tpk" -OutFile "./dist/classdata.tpk"
         }
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: PhiInfo-Full-Package
+        name: PhiInfo-Complete-Package
         path: ./dist
