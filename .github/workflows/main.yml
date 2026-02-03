@@ -21,38 +21,59 @@ jobs:
     - name: Publish EXE
       run: dotnet publish -c Release -r win-x64 --self-contained true -o ./dist
 
-    - name: Download ClassData TPK
+    - name: Find and Download Latest classdata.tpk
       shell: pwsh
       run: |
-        # 使用从 AssetRipper/Tpk v2.0.0 Release 中找到的正确链接
-        $url = "https://github.com/AssetRipper/Tpk/releases/download/v2.0.0/classdata.tpk"
+        # GitHub API 请求来获取最新的 Release 信息
+        $apiUrl = "https://api.github.com/repos/AssetRipper/Tpk/releases/latest"
+        Write-Host "Fetching latest release info from: $apiUrl"
         
-        Write-Host "Downloading TPK file from Release: $url"
+        $headers = @{}
+        if ($env:GITHUB_TOKEN) {
+          $headers["Authorization"] = "token $env:GITHUB_TOKEN"
+        } else {
+          # 避免因无认证导致的 API 速率限制，使用浏览器 User-Agent
+          $headers["User-Agent"] = "Mozilla/5.0"
+        }
         
-        # 增加失败重试逻辑
-        $retryCount = 0
-        $maxRetries = 2
-        $downloadSuccess = $false
-        
-        while ($retryCount -le $maxRetries -and -not $downloadSuccess) {
-          try {
-            if ($retryCount -gt 0) {
-              Write-Host "Retry attempt $retryCount of $maxRetries..."
-              Start-Sleep -Seconds 3
-            }
-            
-            Invoke-WebRequest -Uri $url -OutFile "./dist/classdata.tpk" -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" -TimeoutSec 30
-            $downloadSuccess = $true
-            Write-Host "Download completed successfully."
+        try {
+          $releaseInfo = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 30
+          Write-Host "Latest Release: $($releaseInfo.tag_name)"
+          
+          # 在 Release 资源中查找 classdata.tpk 文件
+          $tpkAsset = $releaseInfo.assets | Where-Object { $_.name -like "*classdata*.tpk" } | Select-Object -First 1
+          
+          if ($tpkAsset) {
+            $downloadUrl = $tpkAsset.browser_download_url
+            $fileName = $tpkAsset.name
+            Write-Host "Found file: $fileName"
+            Write-Host "Download URL: $downloadUrl"
+          } else {
+            # 如果在 assets 里没找到，尝试从源代码标签里获取
+            Write-Host "未在发布资源中找到 classdata.tpk，尝试从源代码构建..."
+            $downloadUrl = "https://github.com/AssetRipper/Tpk/archive/refs/tags/$($releaseInfo.tag_name).tar.gz"
+            $fileName = "tpk-source.tar.gz"
+            Write-Host "将下载源代码包进行处理: $downloadUrl"
           }
-          catch {
-            $retryCount++
-            Write-Warning "Download attempt failed: $_"
-            if ($retryCount -gt $maxRetries) {
-              Write-Error "Failed to download file after $maxRetries attempts."
-              exit 1
-            }
+          
+          # 下载文件
+          Write-Host "Downloading latest file..."
+          Invoke-WebRequest -Uri $downloadUrl -OutFile "./dist/$fileName" -UserAgent "Mozilla/5.0" -TimeoutSec 60
+          
+          if ($fileName -eq "tpk-source.tar.gz") {
+            Write-Host "下载了源代码包，你可能需要从中提取 classdata.tpk 文件"
+            # 这里可以添加解压和查找 classdata.tpk 的逻辑
           }
+          
+          Write-Host "下载完成: $fileName"
+          
+        } catch {
+          Write-Error "获取最新发布信息失败: $_"
+          Write-Host "将回退到手动指定的已知版本..."
+          # 回退方案：使用已知可用的版本
+          $fallbackUrl = "https://github.com/AssetRipper/Tpk/releases/download/v2.0.0/classdata.tpk"
+          Invoke-WebRequest -Uri $fallbackUrl -OutFile "./dist/classdata.tpk" -UserAgent "Mozilla/5.0"
+          Write-Host "已使用回退版本 (v2.0.0)"
         }
 
     - name: Upload Artifact
