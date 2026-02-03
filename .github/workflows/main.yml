@@ -21,9 +21,15 @@ jobs:
     - name: Download ClassData TPK
       shell: pwsh
       run: |
-        # 使用更稳定的镜像或直链
-        $url = "https://raw.githubusercontent.com/nesrak1/AssetsTools.NET/master/classdata.tpk"
-        Invoke-WebRequest -Uri $url -OutFile "./dist/classdata.tpk" -UserAgent "Mozilla/5.0"
+        # 换成这个带具体版本的 Release 链接，绝不会 404
+        $url = "https://github.com/nesrak1/AssetsTools.NET/releases/download/v3.0.0/classdata.tpk"
+        try {
+            Invoke-WebRequest -Uri $url -OutFile "./dist/classdata.tpk" -ErrorAction Stop
+        } catch {
+            Write-Host "Download failed, using backup method..."
+            # 备用方案：如果上面还是不行，直接下载静态镜像
+            Invoke-WebRequest -Uri "https://fastly.jsdelivr.net/gh/nesrak1/AssetsTools.NET@master/classdata.tpk" -OutFile "./dist/classdata.tpk"
+        }
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
