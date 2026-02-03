@@ -1,4 +1,4 @@
-name: Build-PhiInfo
+name: Build-PhiInfo-NightlyLogic
 
 on: [workflow_dispatch]
 
@@ -15,70 +15,29 @@ jobs:
       with:
         dotnet-version: 8.0.x
 
-    - name: Restore Dependencies
-      run: dotnet restore
-
     - name: Publish EXE
       run: dotnet publish -c Release -r win-x64 --self-contained true -o ./dist
 
-    - name: Find and Download Latest classdata.tpk
+    - name: Download Uncompressed TPK
       shell: pwsh
       run: |
-        # GitHub API 请求来获取最新的 Release 信息
-        $apiUrl = "https://api.github.com/repos/AssetRipper/Tpk/releases/latest"
-        Write-Host "Fetching latest release info from: $apiUrl"
+        # 对应图片中 Type Tree Tpk 表格里的 Uncompressed 链接
+        # 这是 Nightly 自动构建的最完整、未压缩的 TPK 资源
+        $url = "https://nightly.link/AssetRipper/Tpk/workflows/type_tree_tpk/master/uncompressed.zip"
         
-        $headers = @{}
-        if ($env:GITHUB_TOKEN) {
-          $headers["Authorization"] = "token $env:GITHUB_TOKEN"
-        } else {
-          # 避免因无认证导致的 API 速率限制，使用浏览器 User-Agent
-          $headers["User-Agent"] = "Mozilla/5.0"
-        }
+        Write-Host "Downloading Uncompressed TPK Package..."
+        Invoke-WebRequest -Uri $url -OutFile "./tpk_package.zip" -UserAgent "Mozilla/5.0"
         
-        try {
-          $releaseInfo = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 30
-          Write-Host "Latest Release: $($releaseInfo.tag_name)"
-          
-          # 在 Release 资源中查找 classdata.tpk 文件
-          $tpkAsset = $releaseInfo.assets | Where-Object { $_.name -like "*classdata*.tpk" } | Select-Object -First 1
-          
-          if ($tpkAsset) {
-            $downloadUrl = $tpkAsset.browser_download_url
-            $fileName = $tpkAsset.name
-            Write-Host "Found file: $fileName"
-            Write-Host "Download URL: $downloadUrl"
-          } else {
-            # 如果在 assets 里没找到，尝试从源代码标签里获取
-            Write-Host "未在发布资源中找到 classdata.tpk，尝试从源代码构建..."
-            $downloadUrl = "https://github.com/AssetRipper/Tpk/archive/refs/tags/$($releaseInfo.tag_name).tar.gz"
-            $fileName = "tpk-source.tar.gz"
-            Write-Host "将下载源代码包进行处理: $downloadUrl"
-          }
-          
-          # 下载文件
-          Write-Host "Downloading latest file..."
-          Invoke-WebRequest -Uri $downloadUrl -OutFile "./dist/$fileName" -UserAgent "Mozilla/5.0" -TimeoutSec 60
-          
-          if ($fileName -eq "tpk-source.tar.gz") {
-            Write-Host "下载了源代码包，你可能需要从中提取 classdata.tpk 文件"
-            # 这里可以添加解压和查找 classdata.tpk 的逻辑
-          }
-          
-          Write-Host "下载完成: $fileName"
-          
-        } catch {
-          Write-Error "获取最新发布信息失败: $_"
-          Write-Host "将回退到手动指定的已知版本..."
-          # 回退方案：使用已知可用的版本
-          $fallbackUrl = "https://github.com/AssetRipper/Tpk/releases/download/v2.0.0/classdata.tpk"
-          Invoke-WebRequest -Uri $fallbackUrl -OutFile "./dist/classdata.tpk" -UserAgent "Mozilla/5.0"
-          Write-Host "已使用回退版本 (v2.0.0)"
-        }
+        # 因为下载的是 .zip 压缩包，需要解压出里面的 classdata.tpk
+        Expand-Archive -Path "./tpk_package.zip" -DestinationPath "./tpk_temp"
+        
+        # 将解压出来的 classdata.tpk 移到程序目录
+        Move-Item "./tpk_temp/classdata.tpk" "./dist/classdata.tpk"
+        
+        Write-Host "Success: classdata.tpk has been integrated."
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: PhiInfo-Complete-Package
         path: ./dist
-        retention-days: 7
