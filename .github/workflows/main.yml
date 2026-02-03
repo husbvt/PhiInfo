@@ -1,0 +1,30 @@
+name: Build-PhiInfo-Full
+
+on: [workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Publish EXE
+      run: dotnet publish -c Release -r win-x64 --self-contained true -o ./dist
+
+    - name: Download ClassData TPK
+      shell: pwsh
+      run: |
+        Invoke-WebRequest -Uri "https://github.com/nesrak1/AssetsTools.NET/raw/master/classdata.tpk" -OutFile "./dist/classdata.tpk"
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: PhiInfo-Full-Package
+        path: ./dist
