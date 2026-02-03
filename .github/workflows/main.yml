@@ -1,4 +1,4 @@
-name: Build-PhiInfo-Final-v2
+name: Build-PhiInfo
 
 on: [workflow_dispatch]
 
@@ -15,23 +15,44 @@ jobs:
       with:
         dotnet-version: 8.0.x
 
+    - name: Restore Dependencies
+      run: dotnet restore
+
     - name: Publish EXE
       run: dotnet publish -c Release -r win-x64 --self-contained true -o ./dist
 
     - name: Download ClassData TPK
       shell: pwsh
       run: |
-        # 这是一个专门从 AssetRipper 自动化构建中提取的、未压缩的 TPK 链接
-        # 注意：不要用 Brotli 版本的，否则 PhiInfo 会报“无法识别格式”的错
-        $url = "https://github.com/AssetRipper/Tpk/releases/download/v1.0.1/classdata.tpk"
+        # 使用从 AssetRipper/Tpk v2.0.0 Release 中找到的正确链接
+        $url = "https://github.com/AssetRipper/Tpk/releases/download/v2.0.0/classdata.tpk"
         
-        # 如果 Release 链接失效，使用以下这个经过验证的 master 分支原始路径
-        # 路径必须是：TpkData/classdata.tpk
-        try {
-            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/AssetRipper/Tpk/master/TpkData/classdata.tpk" -OutFile "./dist/classdata.tpk" -UserAgent "Mozilla/5.0"
-        } catch {
-            Write-Host "Primary download failed, trying backup..."
-            Invoke-WebRequest -Uri "https://github.com/nesrak1/AssetsTools.NET/releases/download/v3.0.0/classdata.tpk" -OutFile "./dist/classdata.tpk"
+        Write-Host "Downloading TPK file from Release: $url"
+        
+        # 增加失败重试逻辑
+        $retryCount = 0
+        $maxRetries = 2
+        $downloadSuccess = $false
+        
+        while ($retryCount -le $maxRetries -and -not $downloadSuccess) {
+          try {
+            if ($retryCount -gt 0) {
+              Write-Host "Retry attempt $retryCount of $maxRetries..."
+              Start-Sleep -Seconds 3
+            }
+            
+            Invoke-WebRequest -Uri $url -OutFile "./dist/classdata.tpk" -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" -TimeoutSec 30
+            $downloadSuccess = $true
+            Write-Host "Download completed successfully."
+          }
+          catch {
+            $retryCount++
+            Write-Warning "Download attempt failed: $_"
+            if ($retryCount -gt $maxRetries) {
+              Write-Error "Failed to download file after $maxRetries attempts."
+              exit 1
+            }
+          }
         }
 
     - name: Upload Artifact
@@ -39,3 +60,4 @@ jobs:
       with:
         name: PhiInfo-Complete-Package
         path: ./dist
+        retention-days: 7
